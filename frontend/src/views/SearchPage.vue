@@ -1,6 +1,5 @@
 <template>
   <div class="space-y-8">
-    <!-- Hero Section -->
     <div class="bg-white/10 backdrop-blur-lg rounded-3xl p-8 sm:p-12 text-center">
       <div class="flex justify-center mb-4">
         <svg class="w-16 h-16 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -9,9 +8,19 @@
       </div>
       <h2 class="text-4xl sm:text-5xl font-bold text-white mb-3">Torrent 资源搜索</h2>
       <p class="text-xl text-white/90">探索海量资源，一键搜索下载</p>
+      <div class="mt-6 flex flex-wrap justify-center gap-2">
+        <span class="px-3 py-1 bg-green-500/20 text-green-300 rounded-full text-sm font-medium flex items-center gap-1">
+          <span class="w-2 h-2 bg-green-400 rounded-full"></span> 可信来源
+        </span>
+        <span class="px-3 py-1 bg-blue-500/20 text-blue-300 rounded-full text-sm font-medium flex items-center gap-1">
+          <span class="w-2 h-2 bg-blue-400 rounded-full"></span> 普通来源
+        </span>
+        <span class="px-3 py-1 bg-orange-500/20 text-orange-300 rounded-full text-sm font-medium flex items-center gap-1">
+          <span class="w-2 h-2 bg-orange-400 rounded-full"></span> 待复核来源
+        </span>
+      </div>
     </div>
 
-    <!-- Search Card -->
     <div class="bg-white rounded-2xl shadow-2xl p-6 sm:p-8">
       <div class="flex gap-3">
         <div class="flex-1">
@@ -40,7 +49,6 @@
       </div>
     </div>
 
-    <!-- Loading Skeletons -->
     <div v-if="loading" class="space-y-4">
       <div v-for="i in 5" :key="i" class="bg-white rounded-xl p-6 animate-pulse">
         <div class="h-6 bg-gray-200 rounded w-3/4 mb-4"></div>
@@ -52,92 +60,95 @@
       </div>
     </div>
 
-    <!-- Search Results -->
-    <div v-else-if="results.length > 0" class="space-y-6">
-      <div class="flex justify-between items-center px-2">
+    <div v-else-if="results.length > 0" class="space-y-8">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 px-2">
         <h3 class="text-2xl font-bold text-white">搜索结果</h3>
-        <span class="text-white/80">找到 {{ results.length }} 个相关资源</span>
+        <div class="flex flex-wrap gap-2 text-sm">
+          <span class="text-white/80">找到 {{ totalActive }} 个有效资源</span>
+          <span v-if="delistedCount > 0" class="text-red-300">（已自动过滤 {{ delistedCount }} 个失效/违规资源）</span>
+        </div>
       </div>
 
-      <transition-group name="list" tag="div" class="space-y-4">
-        <div
-          v-for="(item, index) in results"
-          :key="index"
-          class="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 overflow-hidden"
-        >
-          <div class="p-6">
-            <div class="flex justify-between items-start gap-4 mb-4">
-              <div class="flex-1">
-                <h4 class="text-xl font-semibold text-gray-900 mb-3 leading-tight">
-                  {{ item.Name || item.title }}
-                </h4>
-                <div class="flex flex-wrap gap-2 items-center">
-                  <span v-if="item.Category" class="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium whitespace-nowrap">
-                    {{ item.Category }}
-                  </span>
-                  <span v-if="item.Size" class="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium whitespace-nowrap flex items-center space-x-1">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    <span>{{ item.Size }}</span>
-                  </span>
-                </div>
-              </div>
-              <button
-                @click="addToFavorites(item)"
-                class="flex-shrink-0 p-3 transition-all duration-200 hover:scale-110 hover:rotate-12 rounded-full"
-                :class="item.isFavorited ? 'bg-red-100 text-red-600' : 'bg-yellow-100 hover:bg-yellow-200 text-yellow-600'"
-                :title="item.isFavorited ? '已收藏' : '添加收藏'"
-                :disabled="item.isFavorited"
-              >
-                <!-- Filled Heart for Favorited -->
-                <svg v-if="item.isFavorited" class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd" />
-                </svg>
-                <!-- Outline Heart for Not Favorited -->
-                <svg v-else class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                </svg>
-              </button>
-            </div>
-
-            <div class="grid grid-cols-2 gap-4 mb-4 p-4 bg-gradient-to-r from-green-50 to-yellow-50 rounded-lg">
-              <div class="flex items-center space-x-2 text-green-700">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
-                <div>
-                  <div class="text-xs text-gray-600">做种</div>
-                  <div class="font-bold text-lg">{{ item.Seeders || 0 }}</div>
-                </div>
-              </div>
-              <div class="flex items-center space-x-2 text-yellow-700">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-                </svg>
-                <div>
-                  <div class="text-xs text-gray-600">下载</div>
-                  <div class="font-bold text-lg">{{ item.Leechers || 0 }}</div>
-                </div>
-              </div>
-            </div>
-
-            <button
-              v-if="item.Magnet"
-              @click="copyMagnet(item.Magnet)"
-              class="w-full py-3 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold rounded-lg transition-all duration-200 flex items-center justify-center space-x-2"
-            >
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-              </svg>
-              <span>复制磁力链接</span>
-            </button>
-          </div>
+      <div v-if="searchMeta" class="flex flex-wrap gap-3">
+        <div class="px-4 py-2 bg-green-500/15 border border-green-500/30 rounded-lg text-green-200 text-sm">
+          <span class="font-semibold">{{ searchMeta.trusted_count }}</span> 可信来源
         </div>
-      </transition-group>
+        <div class="px-4 py-2 bg-blue-500/15 border border-blue-500/30 rounded-lg text-blue-200 text-sm">
+          <span class="font-semibold">{{ searchMeta.normal_count }}</span> 普通来源
+        </div>
+        <div class="px-4 py-2 bg-orange-500/15 border border-orange-500/30 rounded-lg text-orange-200 text-sm">
+          <span class="font-semibold">{{ searchMeta.pending_count }}</span> 待复核来源
+        </div>
+      </div>
+
+      <div v-if="groupedResults.trusted.length > 0" class="space-y-4">
+        <div class="flex items-center gap-2 px-2">
+          <div class="w-1 h-6 bg-green-500 rounded-full"></div>
+          <h4 class="text-xl font-bold text-green-300">可信来源</h4>
+          <span class="text-green-200/70 text-sm">（专业团队维护，内容安全可靠）</span>
+        </div>
+        <transition-group name="list" tag="div" class="space-y-4">
+          <div
+            v-for="(item, index) in groupedResults.trusted"
+            :key="'trusted-' + index"
+            class="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 overflow-hidden"
+          >
+            <ResultCard
+              :item="item"
+              :is-favorited="item.isFavorited"
+              @favorite="addToFavorites(item)"
+              @copy="copyMagnet(item.Magnet)"
+            />
+          </div>
+        </transition-group>
+      </div>
+
+      <div v-if="groupedResults.normal.length > 0" class="space-y-4">
+        <div class="flex items-center gap-2 px-2">
+          <div class="w-1 h-6 bg-blue-500 rounded-full"></div>
+          <h4 class="text-xl font-bold text-blue-300">普通来源</h4>
+          <span class="text-blue-200/70 text-sm">（社区运营，建议自行甄别）</span>
+        </div>
+        <transition-group name="list" tag="div" class="space-y-4">
+          <div
+            v-for="(item, index) in groupedResults.normal"
+            :key="'normal-' + index"
+            class="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 overflow-hidden"
+          >
+            <ResultCard
+              :item="item"
+              :is-favorited="item.isFavorited"
+              @favorite="addToFavorites(item)"
+              @copy="copyMagnet(item.Magnet)"
+            />
+          </div>
+        </transition-group>
+      </div>
+
+      <div v-if="groupedResults.pending.length > 0" class="space-y-4">
+        <div class="flex items-center gap-2 px-2">
+          <div class="w-1 h-6 bg-orange-500 rounded-full"></div>
+          <h4 class="text-xl font-bold text-orange-300">待复核来源</h4>
+          <span class="text-orange-200/70 text-sm">（来源可信度待验证，请谨慎使用）</span>
+        </div>
+        <transition-group name="list" tag="div" class="space-y-4">
+          <div
+            v-for="(item, index) in groupedResults.pending"
+            :key="'pending-' + index"
+            class="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 overflow-hidden border-2 border-orange-300/50"
+          >
+            <ResultCard
+              :item="item"
+              :is-favorited="item.isFavorited"
+              @favorite="addToFavorites(item)"
+              @copy="copyMagnet(item.Magnet)"
+              :show-warning="true"
+            />
+          </div>
+        </transition-group>
+      </div>
     </div>
 
-    <!-- Empty State -->
     <div v-else-if="searched && !loading" class="text-center py-16">
       <svg class="w-24 h-24 mx-auto text-white/50 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -151,7 +162,6 @@
       </button>
     </div>
 
-    <!-- Toast Notification -->
     <transition name="slide-up">
       <div
         v-if="toast.show"
@@ -165,14 +175,32 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import api from '../api'
+import ResultCard from '../components/ResultCard.vue'
 
 const searchQuery = ref('')
 const loading = ref(false)
 const results = ref([])
 const searched = ref(false)
 const toast = ref({ show: false, message: '', type: 'success' })
+const searchMeta = ref(null)
+const delistedCount = ref(0)
+
+const groupedResults = computed(() => {
+  const grouped = { trusted: [], normal: [], pending: [] }
+  for (const item of results.value) {
+    const cred = item.Credibility || item.credibility || 'normal'
+    if (grouped[cred]) {
+      grouped[cred].push(item)
+    }
+  }
+  return grouped
+})
+
+const totalActive = computed(() => {
+  return results.value.filter(r => r.Status !== 'delisted' && r.Status !== 'violation').length
+})
 
 const showToast = (message, type = 'success') => {
   toast.value = { show: true, message, type }
@@ -193,11 +221,13 @@ const handleSearch = async () => {
   try {
     const response = await api.search('1337x', searchQuery.value, 1)
     results.value = response.data || []
+    searchMeta.value = response.meta || null
+    delistedCount.value = response.delisted_count || 0
     
     if (results.value.length === 0) {
       showToast('未找到相关资源', 'info')
     } else {
-      showToast(`找到 ${results.value.length} 个相关资源`, 'success')
+      showToast(`找到 ${totalActive.value} 个有效资源${delistedCount.value > 0 ? `（已过滤 ${delistedCount.value} 个失效）` : ''}`, 'success')
     }
   } catch (error) {
     showToast('搜索失败: ' + (error.response?.data?.message || error.message), 'error')
@@ -212,13 +242,21 @@ const addToFavorites = async (item) => {
 
   try {
     await api.addFavorite({
-      name: item.Name || item.title,
-      magnet: item.Magnet,
-      size: item.Size,
-      seeders: item.Seeders,
-      leechers: item.Leechers,
-      category: item.Category,
-      source: '1337x'
+      name: item.Name || item.Title || item.title,
+      magnet: item.Magnet || item.magnet,
+      size: item.Size || item.size,
+      seeders: item.Seeders || item.seeders,
+      leechers: item.Leechers || item.leechers,
+      category: item.Category || item.category,
+      source: item.Source || item.source,
+      source_name: item.SourceName || item.source_name,
+      maintainer: item.Maintainer || item.maintainer,
+      authorization: item.Authorization || item.authorization,
+      mirror_health: item.MirrorHealth || item.mirror_health,
+      last_checked_at: item.LastCheckedAt || item.last_checked_at,
+      credibility: item.Credibility || item.credibility,
+      status: item.Status || item.status,
+      delisted_reason: item.DelistedReason || item.delisted_reason
     })
     item.isFavorited = true
     showToast('收藏成功', 'success')

@@ -1,6 +1,5 @@
 <template>
   <div class="space-y-8">
-    <!-- Header -->
     <div class="bg-white/10 backdrop-blur-lg rounded-3xl p-8 text-center">
       <div class="flex justify-center mb-4">
         <svg class="w-16 h-16 text-white" fill="currentColor" viewBox="0 0 24 24">
@@ -9,9 +8,15 @@
       </div>
       <h2 class="text-4xl font-bold text-white mb-3">我的收藏</h2>
       <p class="text-xl text-white/90">{{ favorites.length }} 个精选资源</p>
+      <div v-if="favorites.length > 0" class="mt-4 flex flex-wrap justify-center gap-2 text-sm">
+        <span class="text-green-300">{{ getCountByCredibility('trusted') }} 可信</span>
+        <span class="text-white/50">·</span>
+        <span class="text-blue-300">{{ getCountByCredibility('normal') }} 普通</span>
+        <span class="text-white/50">·</span>
+        <span class="text-orange-300">{{ getCountByCredibility('pending') }} 待复核</span>
+      </div>
     </div>
 
-    <!-- Loading Skeletons -->
     <div v-if="loading" class="space-y-4">
       <div v-for="i in 3" :key="i" class="bg-white rounded-xl p-6 animate-pulse">
         <div class="h-6 bg-gray-200 rounded w-3/4 mb-4"></div>
@@ -20,35 +25,33 @@
       </div>
     </div>
 
-    <!-- Favorites List -->
     <div v-else-if="favorites.length > 0" class="space-y-4">
       <transition-group name="list" tag="div">
         <div
           v-for="item in favorites"
           :key="item.id"
-          class="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 overflow-hidden"
+          class="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 overflow-hidden relative"
+          :class="{ 'opacity-60 border-2 border-red-200': isInactive(item) }"
         >
-          <div class="p-6">
-            <div class="flex justify-between items-start gap-4 mb-4">
-              <div class="flex-1">
-                <h4 class="text-xl font-semibold text-gray-900 mb-3 leading-tight">
-                  {{ item.name }}
-                </h4>
-                <div class="flex flex-wrap gap-2">
-                  <span v-if="item.category" class="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium whitespace-nowrap">
-                    {{ item.category }}
-                  </span>
-                  <span v-if="item.size" class="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium whitespace-nowrap flex items-center space-x-1">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    <span>{{ item.size }}</span>
-                  </span>
-                </div>
-              </div>
+          <div v-if="isInactive(item)" class="absolute top-4 right-4 z-10">
+            <span class="px-3 py-1 bg-red-500 text-white rounded-full text-xs font-medium">
+              {{ item.status === 'delisted' ? '已失效' : item.status === 'violation' ? '疑似违规' : '待复核' }}
+            </span>
+          </div>
+          <div class="flex">
+            <div class="flex-1">
+              <ResultCard
+                :item="normalizeItem(item)"
+                :is-favorited="true"
+                :show-warning="item.credibility === 'pending' || item.status === 'pending_review'"
+                @copy="copyMagnet(item.magnet)"
+                @favorite="() => {}"
+              />
+            </div>
+            <div class="p-6 flex flex-col justify-center border-l border-gray-100">
               <button
                 @click="confirmDelete(item.id)"
-                class="flex-shrink-0 p-3 bg-red-100 hover:bg-red-200 text-red-600 rounded-full transition-all duration-200 hover:scale-110 hover:rotate-12"
+                class="flex-shrink-0 p-3 bg-red-100 hover:bg-red-200 text-red-600 rounded-full transition-all duration-200 hover:scale-110"
                 title="删除收藏"
               >
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -56,49 +59,11 @@
                 </svg>
               </button>
             </div>
-
-            <div class="grid grid-cols-2 gap-4 mb-4 p-4 bg-gradient-to-r from-green-50 to-yellow-50 rounded-lg">
-              <div class="flex items-center space-x-2 text-green-700">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
-                <div>
-                  <div class="text-xs text-gray-600">做种</div>
-                  <div class="font-bold text-lg">{{ item.seeders || 0 }}</div>
-                </div>
-              </div>
-              <div class="flex items-center space-x-2 text-yellow-700">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-                </svg>
-                <div>
-                  <div class="text-xs text-gray-600">下载</div>
-                  <div class="font-bold text-lg">{{ item.leechers || 0 }}</div>
-                </div>
-              </div>
-            </div>
-
-            <button
-              @click="copyMagnet(item.magnet)"
-              class="w-full py-3 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold rounded-lg transition-all duration-200 flex items-center justify-center space-x-2 mb-4"
-            >
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-              </svg>
-              <span>复制磁力链接</span>
-            </button>
-
-            <div class="flex items-center space-x-2 text-gray-500 text-sm pt-4 border-t border-gray-100">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
           </div>
         </div>
       </transition-group>
     </div>
 
-    <!-- Empty State -->
     <div v-else class="text-center py-16">
       <svg class="w-24 h-24 mx-auto text-white/50 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
@@ -115,7 +80,6 @@
       </button>
     </div>
 
-    <!-- Toast Notification -->
     <transition name="slide-up">
       <div
         v-if="toast.show"
@@ -126,7 +90,6 @@
       </div>
     </transition>
 
-    <!-- Confirm Dialog -->
     <transition name="fade">
       <div v-if="showConfirm" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
         <div class="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl">
@@ -155,6 +118,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '../api'
+import ResultCard from '../components/ResultCard.vue'
 
 const favorites = ref([])
 const loading = ref(false)
@@ -202,9 +166,33 @@ const copyMagnet = (magnet) => {
   showToast('磁力链接已复制到剪贴板', 'success')
 }
 
-const formatDate = (dateStr) => {
-  const date = new Date(dateStr)
-  return date.toLocaleString('zh-CN')
+const getCountByCredibility = (cred) => {
+  return favorites.value.filter(f => f.credibility === cred).length
+}
+
+const isInactive = (item) => {
+  return item.status === 'delisted' || item.status === 'violation'
+}
+
+const normalizeItem = (item) => {
+  return {
+    Name: item.name,
+    Title: item.name,
+    Magnet: item.magnet,
+    Size: item.size,
+    Seeders: item.seeders,
+    Leechers: item.leechers,
+    Category: item.category,
+    Source: item.source,
+    SourceName: item.source_name || item.source,
+    Maintainer: item.maintainer,
+    Authorization: item.authorization,
+    MirrorHealth: item.mirror_health,
+    LastCheckedAt: item.last_checked_at,
+    Credibility: item.credibility,
+    Status: item.status,
+    DelistedReason: item.delisted_reason
+  }
 }
 
 onMounted(() => {

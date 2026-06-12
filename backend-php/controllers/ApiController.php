@@ -8,6 +8,63 @@ class ApiController {
     private $searchHistory;
     private $favorite;
 
+    private $providersConfig = [
+        '1337x' => [
+            'name' => '1337x',
+            'slug' => '1337x',
+            'credibility' => 'trusted',
+            'maintainer' => '1337x Official Team',
+            'authorization' => '公开索引，用户自行上传内容，DMCA合规处理',
+            'official_url' => 'https://1337x.to',
+            'description' => '知名公开种子索引站，内容覆盖面广，审核机制完善'
+        ],
+        'yts' => [
+            'name' => 'YTS',
+            'slug' => 'yts',
+            'credibility' => 'trusted',
+            'maintainer' => 'YTS Team',
+            'authorization' => '专注于高清电影资源，遵守DMCA下架流程',
+            'official_url' => 'https://yts.mx',
+            'description' => '专业电影资源站，以高质量小体积影片著称'
+        ],
+        'thepiratebay' => [
+            'name' => 'The Pirate Bay',
+            'slug' => 'thepiratebay',
+            'credibility' => 'normal',
+            'maintainer' => 'Community Maintained',
+            'authorization' => '社区运营，无官方审核，用户需自行甄别',
+            'official_url' => 'https://thepiratebay.org',
+            'description' => '历史悠久的社区型资源站，内容混杂需谨慎'
+        ],
+        'rarbg' => [
+            'name' => 'Rarbg',
+            'slug' => 'rarbg',
+            'credibility' => 'trusted',
+            'maintainer' => 'RARBG Team',
+            'authorization' => '专业团队运营，严格内容审核，DMCA合规',
+            'official_url' => 'https://rarbg.to',
+            'description' => '高质量资源站，以专业的发布组和严格审核闻名'
+        ],
+        'torrent9' => [
+            'name' => 'Torrent9',
+            'slug' => 'torrent9',
+            'credibility' => 'pending',
+            'maintainer' => 'Unknown',
+            'authorization' => '来源可信度待复核，建议谨慎使用',
+            'official_url' => 'https://torrent9.to',
+            'description' => '法语区资源站，来源可靠性待验证'
+        ],
+        'eztv' => [
+            'name' => 'EZTV',
+            'slug' => 'eztv',
+            'credibility' => 'normal',
+            'maintainer' => 'EZTV Team',
+            'authorization' => '专注电视剧资源，社区审核',
+            'official_url' => 'https://eztv.re',
+            'description' => '老牌电视剧资源站，剧集更新及时'
+        ]
+    ];
+
     public function __construct() {
         $database = new Database();
         $this->db = $database->getConnection();
@@ -15,7 +72,6 @@ class ApiController {
         $this->favorite = new Favorite($this->db);
     }
 
-    // GET /health
     public function healthCheck() {
         echo json_encode([
             'status' => 'ok',
@@ -24,42 +80,80 @@ class ApiController {
         ]);
     }
 
-    // GET /api/providers
     public function getProviders() {
-        // Mocking providers since we use demo data
+        $providers = [];
+        foreach ($this->providersConfig as $slug => $config) {
+            $providers[] = $config;
+        }
+
+        $grouped = [
+            'trusted' => [],
+            'normal' => [],
+            'pending' => []
+        ];
+        foreach ($providers as $p) {
+            $grouped[$p['credibility']][] = $p;
+        }
+
         echo json_encode([
             'success' => true,
             'data' => [
-                'all' => ['1337x', 'Yts', 'ThePirateBay', 'Rarbg', 'Torrent9'],
+                'all' => $providers,
+                'grouped' => $grouped,
                 'active' => ['1337x', 'Yts']
             ]
         ]);
     }
 
-    // GET /api/search/:keyword/:query/:page
     public function search($keyword, $query, $page = 1) {
-        // Save history
         $this->searchHistory->keyword = $keyword;
         $this->searchHistory->query = $query;
         $this->searchHistory->create();
 
-        // Generate demo data
         $results = $this->generateDemoData($query, $keyword, $page);
+
+        $groupedResults = [
+            'trusted' => [],
+            'normal' => [],
+            'pending' => []
+        ];
+        $delisted = [];
+
+        foreach ($results as $item) {
+            if ($item['Status'] === 'delisted' || $item['Status'] === 'violation') {
+                $delisted[] = $item;
+            } else {
+                $groupedResults[$item['Credibility']][] = $item;
+            }
+        }
+
+        foreach ($groupedResults as $level => &$items) {
+            usort($items, function($a, $b) {
+                return $b['Seeders'] - $a['Seeders'];
+            });
+        }
+        unset($items);
+
+        $sortedResults = array_merge($groupedResults['trusted'], $groupedResults['normal'], $groupedResults['pending']);
 
         echo json_encode([
             'success' => true,
-            'data' => $results,
+            'data' => $sortedResults,
+            'grouped' => $groupedResults,
+            'delisted_count' => count($delisted),
             'meta' => [
                 'keyword' => $keyword,
                 'query' => $query,
                 'page' => (int)$page,
-                'count' => count($results),
+                'count' => count($sortedResults),
+                'trusted_count' => count($groupedResults['trusted']),
+                'normal_count' => count($groupedResults['normal']),
+                'pending_count' => count($groupedResults['pending']),
                 'demo' => true
             ]
         ]);
     }
 
-    // GET /api/history
     public function getHistory() {
         $limit = isset($_GET['limit']) ? $_GET['limit'] : 20;
         $history = $this->searchHistory->findAll($limit);
@@ -70,7 +164,6 @@ class ApiController {
         ]);
     }
 
-    // DELETE /api/history
     public function clearHistory() {
         if ($this->searchHistory->deleteAll()) {
             echo json_encode(['success' => true, 'message' => '搜索历史已清空']);
@@ -80,7 +173,6 @@ class ApiController {
         }
     }
 
-    // POST /api/favorites
     public function addFavorite() {
         $data = json_decode(file_get_contents("php://input"));
 
@@ -90,7 +182,6 @@ class ApiController {
             return;
         }
 
-        // Check existing
         if ($this->favorite->findOneByMagnet($data->magnet)) {
             http_response_code(400);
             echo json_encode(['success' => false, 'message' => '该资源已在收藏列表中']);
@@ -104,6 +195,14 @@ class ApiController {
         $this->favorite->leechers = $data->leechers ?? 0;
         $this->favorite->category = $data->category;
         $this->favorite->source = $data->source;
+        $this->favorite->source_name = $data->source_name ?? $data->source;
+        $this->favorite->maintainer = $data->maintainer ?? '';
+        $this->favorite->authorization = $data->authorization ?? '';
+        $this->favorite->mirror_health = $data->mirror_health ?? 'unknown';
+        $this->favorite->last_checked_at = $data->last_checked_at ?? null;
+        $this->favorite->credibility = $data->credibility ?? 'normal';
+        $this->favorite->status = $data->status ?? 'active';
+        $this->favorite->delisted_reason = $data->delisted_reason ?? '';
 
         if ($this->favorite->create()) {
             echo json_encode([
@@ -117,7 +216,6 @@ class ApiController {
         }
     }
 
-    // GET /api/favorites
     public function getFavorites() {
         $favorites = $this->favorite->findAll();
         echo json_encode([
@@ -126,7 +224,6 @@ class ApiController {
         ]);
     }
 
-    // DELETE /api/favorites/:id
     public function deleteFavorite($id) {
         if ($this->favorite->delete($id)) {
             echo json_encode(['success' => true, 'message' => '删除成功']);
@@ -136,24 +233,70 @@ class ApiController {
         }
     }
 
+    private function getProviderInfo($providerSlug) {
+        $slug = strtolower($providerSlug);
+        return $this->providersConfig[$slug] ?? [
+            'name' => $providerSlug,
+            'slug' => $slug,
+            'credibility' => 'pending',
+            'maintainer' => 'Unknown',
+            'authorization' => '来源信息未知，建议谨慎使用',
+            'official_url' => '',
+            'description' => '未登记的来源站点'
+        ];
+    }
+
     private function generateDemoData($query, $provider, $page) {
         $demoTorrents = [];
-        // Deterministic random seed based on query length relative to day to make it semi-consistent but changing
-        // Actually for PHP just using rand is fine for demo
-        
-        $count = 5;
+        $providerInfo = $this->getProviderInfo($provider);
+
+        $credibilityLevels = ['trusted', 'trusted', 'normal', 'normal', 'pending'];
+        $mirrorHealthOptions = ['healthy', 'healthy', 'healthy', 'warning', 'unhealthy', 'unknown'];
+        $statusOptions = ['active', 'active', 'active', 'active', 'delisted', 'violation', 'pending_review'];
+        $categories = ['Movies', 'TV', 'Games', 'Software', 'Music'];
+        $resolutions = ['1080p', '720p', '2160p', '480p'];
+
+        $count = 10;
         for ($i = 0; $i < $count; $i++) {
-            $randomString = substr(str_shuffle("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"), 0, 6);
-            
+            $randomString = substr(str_shuffle("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"), 0, 8);
+            $credibility = $credibilityLevels[array_rand($credibilityLevels)];
+            $mirrorHealth = $mirrorHealthOptions[array_rand($mirrorHealthOptions)];
+            $status = $statusOptions[array_rand($statusOptions)];
+            $category = $categories[array_rand($categories)];
+            $resolution = $resolutions[array_rand($resolutions)];
+
+            $delistedReason = '';
+            if ($status === 'delisted') {
+                $delistedReason = '链接已失效，无法访问';
+            } elseif ($status === 'violation') {
+                $delistedReason = '疑似违规内容，已从推荐中移除';
+            } elseif ($status === 'pending_review') {
+                $delistedReason = '内容待人工复核';
+            }
+
+            $hoursAgo = rand(1, 720);
+            $lastChecked = date('c', time() - $hoursAgo * 3600);
+
             $item = [
-                'Name' => "$query Result " . ($i + 1) . " [$provider] [1080p]",
+                'Name' => "$query Result " . ($i + 1) . " [$provider] [$resolution]",
+                'Title' => "$query " . ucfirst($category) . " Release " . ($i + 1),
                 'Magnet' => "magnet:?xt=urn:btih:DEMO$randomString&dn=" . urlencode($query),
                 'Size' => rand(1, 20) . "." . rand(0, 99) . " GB",
                 'Seeders' => rand(50, 2000),
                 'Leechers' => rand(10, 500),
-                'Category' => 'Movies',
+                'Category' => $category,
                 'Url' => "https://example.com/torrent/" . strtolower(str_replace(' ', '-', $query)) . "-$i",
-                'DateUploaded' => rand(1, 30) . ' days ago'
+                'DateUploaded' => rand(1, 30) . ' days ago',
+                'Source' => $provider,
+                'SourceName' => $providerInfo['name'],
+                'Maintainer' => $providerInfo['maintainer'],
+                'Authorization' => $providerInfo['authorization'],
+                'OfficialUrl' => $providerInfo['official_url'],
+                'MirrorHealth' => $mirrorHealth,
+                'LastCheckedAt' => $lastChecked,
+                'Credibility' => $credibility,
+                'Status' => $status,
+                'DelistedReason' => $delistedReason
             ];
             $demoTorrents[] = $item;
         }
