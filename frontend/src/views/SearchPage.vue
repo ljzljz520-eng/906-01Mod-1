@@ -22,7 +22,7 @@
     </div>
 
     <div class="bg-white rounded-2xl shadow-2xl p-6 sm:p-8">
-      <div class="flex gap-3">
+      <div class="flex flex-col sm:flex-row gap-3 mb-5">
         <div class="flex-1">
           <input
             v-model="searchQuery"
@@ -35,7 +35,7 @@
         <button
           @click="handleSearch"
           :disabled="loading"
-          class="px-8 py-4 bg-gradient-to-r from-purple-600 to-purple-700 text-white font-semibold rounded-xl hover:from-purple-700 hover:to-purple-800 focus:ring-4 focus:ring-purple-300 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+          class="px-8 py-4 bg-gradient-to-r from-purple-600 to-purple-700 text-white font-semibold rounded-xl hover:from-purple-700 hover:to-purple-800 focus:ring-4 focus:ring-purple-300 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           <svg v-if="!loading" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -44,8 +44,81 @@
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
           </svg>
-          <span class="hidden sm:inline">{{ loading ? '搜索中...' : '搜索' }}</span>
+          <span>{{ loading ? '搜索中...' : '搜索' }}</span>
         </button>
+      </div>
+
+      <div class="space-y-4">
+        <div class="flex items-center gap-2 text-gray-500 text-sm">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span class="font-medium">选择搜索来源：</span>
+          <span class="text-gray-400">{{ selectedProviderLabel }}</span>
+        </div>
+
+        <div class="space-y-3">
+          <div>
+            <div class="text-xs text-gray-500 mb-2 font-medium">全部来源</div>
+            <div class="flex flex-wrap gap-2">
+              <ProviderChip
+                label="全部来源"
+                :active="selectedProvider === 'all'"
+                @click="selectProvider('all')"
+                description="从所有来源聚合搜索"
+                badge="6站"
+              />
+            </div>
+          </div>
+
+          <div>
+            <div class="text-xs text-green-600 mb-2 font-medium flex items-center gap-1">
+              <span class="w-2 h-2 bg-green-500 rounded-full"></span> 可信来源
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <ProviderChip
+                v-for="p in providersGrouped.trusted"
+                :key="p.slug"
+                :label="p.name"
+                :active="selectedProvider === p.slug"
+                @click="selectProvider(p.slug)"
+                :description="p.description"
+              />
+            </div>
+          </div>
+
+          <div>
+            <div class="text-xs text-blue-600 mb-2 font-medium flex items-center gap-1">
+              <span class="w-2 h-2 bg-blue-500 rounded-full"></span> 普通来源
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <ProviderChip
+                v-for="p in providersGrouped.normal"
+                :key="p.slug"
+                :label="p.name"
+                :active="selectedProvider === p.slug"
+                @click="selectProvider(p.slug)"
+                :description="p.description"
+              />
+            </div>
+          </div>
+
+          <div>
+            <div class="text-xs text-orange-600 mb-2 font-medium flex items-center gap-1">
+              <span class="w-2 h-2 bg-orange-500 rounded-full"></span> 待复核来源
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <ProviderChip
+                v-for="p in providersGrouped.pending"
+                :key="p.slug"
+                :label="p.name"
+                :active="selectedProvider === p.slug"
+                @click="selectProvider(p.slug)"
+                :description="p.description"
+              />
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -175,10 +248,14 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import api from '../api'
 import ResultCard from '../components/ResultCard.vue'
+import ProviderChip from '../components/ProviderChip.vue'
 
+const providers = ref([])
+const providersGrouped = ref({ trusted: [], normal: [], pending: [] })
+const selectedProvider = ref('all')
 const searchQuery = ref('')
 const loading = ref(false)
 const results = ref([])
@@ -186,6 +263,12 @@ const searched = ref(false)
 const toast = ref({ show: false, message: '', type: 'success' })
 const searchMeta = ref(null)
 const delistedCount = ref(0)
+
+const selectedProviderLabel = computed(() => {
+  if (selectedProvider.value === 'all') return '全部来源（聚合搜索）'
+  const p = providers.value.find(x => x.slug === selectedProvider.value)
+  return p ? p.name : selectedProvider.value
+})
 
 const groupedResults = computed(() => {
   const grouped = { trusted: [], normal: [], pending: [] }
@@ -209,6 +292,28 @@ const showToast = (message, type = 'success') => {
   }, 3000)
 }
 
+const loadProviders = async () => {
+  try {
+    const response = await api.getProviders()
+    providers.value = response.data?.all || []
+    if (response.data?.grouped) {
+      providersGrouped.value = response.data.grouped
+    } else {
+      providersGrouped.value = { trusted: [], normal: [], pending: [] }
+      for (const p of providers.value) {
+        const c = p.credibility || 'normal'
+        if (providersGrouped.value[c]) providersGrouped.value[c].push(p)
+      }
+    }
+  } catch (e) {
+    console.warn('加载来源列表失败', e)
+  }
+}
+
+const selectProvider = (slug) => {
+  selectedProvider.value = slug
+}
+
 const handleSearch = async () => {
   if (!searchQuery.value.trim()) {
     showToast('请输入搜索关键词', 'error')
@@ -219,11 +324,11 @@ const handleSearch = async () => {
   searched.value = true
 
   try {
-    const response = await api.search('1337x', searchQuery.value, 1)
+    const response = await api.search(selectedProvider.value, searchQuery.value, 1)
     results.value = response.data || []
     searchMeta.value = response.meta || null
     delistedCount.value = response.delisted_count || 0
-    
+
     if (results.value.length === 0) {
       showToast('未找到相关资源', 'info')
     } else {
@@ -274,6 +379,10 @@ const copyMagnet = (magnet) => {
   navigator.clipboard.writeText(magnet)
   showToast('磁力链接已复制到剪贴板', 'success')
 }
+
+onMounted(() => {
+  loadProviders()
+})
 </script>
 
 <style scoped>

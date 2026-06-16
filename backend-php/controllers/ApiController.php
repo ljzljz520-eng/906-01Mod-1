@@ -106,11 +106,23 @@ class ApiController {
     }
 
     public function search($keyword, $query, $page = 1) {
-        $this->searchHistory->keyword = $keyword;
-        $this->searchHistory->query = $query;
-        $this->searchHistory->create();
+        $results = [];
 
-        $results = $this->generateDemoData($query, $keyword, $page);
+        if (strtolower($keyword) === 'all') {
+            $allSlugs = array_keys($this->providersConfig);
+            foreach ($allSlugs as $slug) {
+                $this->searchHistory->keyword = $slug;
+                $this->searchHistory->query = $query;
+                $this->searchHistory->create();
+                $per = $this->generateDemoData($query, $slug, $page);
+                $results = array_merge($results, $per);
+            }
+        } else {
+            $this->searchHistory->keyword = $keyword;
+            $this->searchHistory->query = $query;
+            $this->searchHistory->create();
+            $results = $this->generateDemoData($query, $keyword, $page);
+        }
 
         $groupedResults = [
             'trusted' => [],
@@ -246,22 +258,50 @@ class ApiController {
         ];
     }
 
+    private function getMirrorHealthByCredibility($credibility) {
+        $pool = [
+            'trusted' => ['healthy', 'healthy', 'healthy', 'healthy', 'healthy', 'warning'],
+            'normal'  => ['healthy', 'healthy', 'healthy', 'warning', 'warning', 'unhealthy'],
+            'pending' => ['healthy', 'warning', 'warning', 'unhealthy', 'unhealthy', 'unknown']
+        ];
+        $options = $pool[$credibility] ?? ['unknown'];
+        return $options[array_rand($options)];
+    }
+
+    private function getLastCheckedByCredibility($credibility) {
+        $range = [
+            'trusted' => ['min' => 1,   'max' => 24],
+            'normal'  => ['min' => 25,  'max' => 168],
+            'pending' => ['min' => 169, 'max' => 720]
+        ];
+        $r = $range[$credibility] ?? ['min' => 1, 'max' => 720];
+        $hoursAgo = rand($r['min'], $r['max']);
+        return date('c', time() - $hoursAgo * 3600);
+    }
+
+    private function getStatusByCredibility($credibility) {
+        $pool = [
+            'trusted' => ['active', 'active', 'active', 'active', 'active', 'active', 'pending_review', 'delisted'],
+            'normal'  => ['active', 'active', 'active', 'active', 'pending_review', 'delisted', 'violation'],
+            'pending' => ['active', 'active', 'pending_review', 'pending_review', 'delisted', 'violation']
+        ];
+        $options = $pool[$credibility] ?? ['active'];
+        return $options[array_rand($options)];
+    }
+
     private function generateDemoData($query, $provider, $page) {
         $demoTorrents = [];
         $providerInfo = $this->getProviderInfo($provider);
+        $credibility = $providerInfo['credibility'];
 
-        $credibilityLevels = ['trusted', 'trusted', 'normal', 'normal', 'pending'];
-        $mirrorHealthOptions = ['healthy', 'healthy', 'healthy', 'warning', 'unhealthy', 'unknown'];
-        $statusOptions = ['active', 'active', 'active', 'active', 'delisted', 'violation', 'pending_review'];
         $categories = ['Movies', 'TV', 'Games', 'Software', 'Music'];
         $resolutions = ['1080p', '720p', '2160p', '480p'];
 
         $count = 10;
         for ($i = 0; $i < $count; $i++) {
             $randomString = substr(str_shuffle("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"), 0, 8);
-            $credibility = $credibilityLevels[array_rand($credibilityLevels)];
-            $mirrorHealth = $mirrorHealthOptions[array_rand($mirrorHealthOptions)];
-            $status = $statusOptions[array_rand($statusOptions)];
+            $mirrorHealth = $this->getMirrorHealthByCredibility($credibility);
+            $status = $this->getStatusByCredibility($credibility);
             $category = $categories[array_rand($categories)];
             $resolution = $resolutions[array_rand($resolutions)];
 
@@ -274,8 +314,7 @@ class ApiController {
                 $delistedReason = '内容待人工复核';
             }
 
-            $hoursAgo = rand(1, 720);
-            $lastChecked = date('c', time() - $hoursAgo * 3600);
+            $lastChecked = $this->getLastCheckedByCredibility($credibility);
 
             $item = [
                 'Name' => "$query Result " . ($i + 1) . " [$provider] [$resolution]",
